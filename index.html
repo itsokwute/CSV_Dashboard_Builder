@@ -1,0 +1,1044 @@
+<!-- Built by Nova Agentic — colors match Microsoft Power BI's official brand yellow (#F2C811) and default report data-color palette. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSV Dashboard Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    /* ---- Power BI token system ---- */
+    --pbi-yellow: #F2C811;
+    --pbi-yellow-dark: #D6AF0C;
+    --pbi-header: #252423;
+    --pbi-header-2: #201F1E;
+    --pbi-canvas-light: #F3F2F1;
+    --pbi-canvas-dark: #1E1E1E;
+    --pbi-card-light: #FFFFFF;
+    --pbi-card-dark: #2B2B2B;
+    --pbi-border-light: #E1DFDD;
+    --pbi-border-dark: #3B3B3B;
+    --pbi-text-light: #252423;
+    --pbi-text-dark: #F3F2F1;
+    --pbi-text-secondary: #605E5C;
+    --pbi-text-secondary-dark: #A19F9D;
+
+    /* Power BI default data-color palette */
+    --d1: #01B8AA;
+    --d2: #374649;
+    --d3: #FD625E;
+    --d4: #F2C80F;
+    --d5: #5F6B6D;
+    --d6: #8AD4EB;
+    --d7: #FE9666;
+    --d8: #A66999;
+    --d9: #3599B8;
+    --d10:#DFBFBF;
+
+    --canvas: var(--pbi-canvas-light);
+    --card: var(--pbi-card-light);
+    --border: var(--pbi-border-light);
+    --text: var(--pbi-text-light);
+    --text-secondary: var(--pbi-text-secondary);
+  }
+  [data-theme="dark"]{
+    --canvas: var(--pbi-canvas-dark);
+    --card: var(--pbi-card-dark);
+    --border: var(--pbi-border-dark);
+    --text: var(--pbi-text-dark);
+    --text-secondary: var(--pbi-text-secondary-dark);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    background:var(--canvas);
+    color:var(--text);
+    transition:background .2s ease, color .2s ease;
+  }
+
+  /* ===== Ribbon / header ===== */
+  .ribbon{
+    background:var(--pbi-header);
+    border-bottom:3px solid var(--pbi-yellow);
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:0 16px;
+    height:52px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-right:8px;
+    white-space:nowrap;
+  }
+  .brand .logo{
+    width:20px;height:20px;
+    background:var(--pbi-yellow);
+    border-radius:3px;
+    position:relative;
+    flex:none;
+  }
+  .brand .logo::before,.brand .logo::after{
+    content:"";
+    position:absolute;
+    background:var(--pbi-header);
+  }
+  .brand .logo::before{ width:4px; height:10px; left:4px; bottom:2px; }
+  .brand .logo::after{ width:4px; height:14px; right:4px; bottom:2px; }
+  .brand span{
+    color:#fff;
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:.2px;
+  }
+  .ribbon-divider{ width:1px; height:28px; background:#3F3D3B; flex:none; }
+  .ribbon-btn{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:transparent;
+    border:1px solid transparent;
+    color:#EDEBE9;
+    font-size:12.5px;
+    font-family:inherit;
+    padding:7px 12px;
+    border-radius:2px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .ribbon-btn:hover{ background:#383635; border-color:#4B4A48; }
+  .ribbon-btn.primary{
+    background:var(--pbi-yellow);
+    color:var(--pbi-header-2);
+    font-weight:600;
+    border-color:var(--pbi-yellow);
+  }
+  .ribbon-btn.primary:hover{ background:var(--pbi-yellow-dark); }
+  .ribbon-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .ribbon-icon{ width:14px; height:14px; flex:none; }
+  .ribbon-spacer{ flex:1; }
+  .theme-toggle{
+    display:flex; align-items:center; gap:8px;
+    color:#C8C6C4; font-size:12px;
+  }
+  .switch{
+    width:34px; height:18px; border-radius:9px;
+    background:#4B4A48; position:relative; cursor:pointer; flex:none;
+    transition:background .15s ease;
+  }
+  .switch.on{ background:var(--pbi-yellow); }
+  .switch .knob{
+    position:absolute; top:2px; left:2px; width:14px; height:14px;
+    background:#fff; border-radius:50%; transition:left .15s ease;
+  }
+  .switch.on .knob{ left:18px; }
+  #csvInput{ display:none; }
+  .file-tag{
+    color:#C8C6C4; font-size:11.5px; padding:5px 10px;
+    border:1px solid #4B4A48; border-radius:2px; white-space:nowrap;
+    max-width:220px; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  /* ===== App layout ===== */
+  .app{
+    display:flex;
+    height:calc(100% - 81px);
+  }
+
+  /* ---- Fields pane (left) ---- */
+  .fields-pane{
+    width:230px;
+    flex:none;
+    background:var(--card);
+    border-right:1px solid var(--border);
+    overflow-y:auto;
+    padding:12px 10px;
+  }
+  .pane-title{
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.5px;
+    color:var(--text-secondary);
+    margin:0 4px 10px;
+  }
+  .field-table-group{ margin-bottom:14px; }
+  .field-table-name{
+    display:flex; align-items:center; gap:6px;
+    font-size:12.5px; font-weight:600; color:var(--text);
+    padding:4px;
+  }
+  .field-table-icon{
+    width:14px; height:14px; flex:none; color:var(--pbi-yellow-dark);
+  }
+  .field-row{
+    display:flex; align-items:center; gap:7px;
+    padding:5px 6px 5px 20px;
+    font-size:12px;
+    color:var(--text);
+    border-radius:3px;
+    cursor:default;
+  }
+  .field-row:hover{ background:rgba(242,200,17,0.12); }
+  .field-type-icon{
+    width:13px; height:13px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:700; border-radius:2px;
+    color:#fff;
+  }
+  .ft-num{ background:var(--d1); }
+  .ft-date{ background:var(--d7); }
+  .ft-text{ background:var(--d5); }
+  .field-empty{
+    font-size:12px; color:var(--text-secondary); padding:6px;
+    line-height:1.5;
+  }
+
+  /* ---- Canvas (center) ---- */
+  .canvas-wrap{
+    flex:1;
+    overflow-y:auto;
+    padding:18px;
+  }
+  .canvas-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));
+    gap:16px;
+    align-items:start;
+  }
+  .empty-canvas{
+    height:100%;
+    min-height:400px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    color:var(--text-secondary);
+    border:2px dashed var(--border);
+    border-radius:6px;
+    padding:40px;
+  }
+  .empty-canvas .big-icon{
+    width:54px; height:54px; color:var(--pbi-yellow-dark); margin-bottom:14px;
+  }
+  .empty-canvas h2{
+    font-size:17px; margin:0 0 6px; color:var(--text); font-weight:600;
+  }
+  .empty-canvas p{ font-size:13px; margin:0 0 18px; max-width:340px; }
+
+  .visual-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:4px;
+    box-shadow:0 1.6px 3.6px rgba(0,0,0,.08);
+    display:flex;
+    flex-direction:column;
+    min-height:300px;
+    cursor:pointer;
+    outline:none;
+  }
+  .visual-card.selected{
+    border-color:var(--pbi-yellow);
+    box-shadow:0 0 0 1px var(--pbi-yellow), 0 1.6px 6px rgba(0,0,0,.12);
+  }
+  .visual-card.slicer-card{ min-height:150px; }
+  .visual-header{
+    display:flex; align-items:center; gap:8px;
+    padding:9px 10px;
+    border-bottom:1px solid var(--border);
+  }
+  .visual-title{
+    font-size:12.5px; font-weight:600; flex:1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .visual-type-chip{
+    font-size:9.5px; text-transform:uppercase; letter-spacing:.4px;
+    color:var(--text-secondary);
+    background:rgba(128,128,128,0.12);
+    padding:2px 6px; border-radius:8px; flex:none;
+  }
+  .visual-remove{
+    background:none; border:none; cursor:pointer;
+    color:var(--text-secondary); font-size:14px; line-height:1;
+    padding:2px 4px; border-radius:3px;
+  }
+  .visual-remove:hover{ background:rgba(253,98,94,0.15); color:var(--d3); }
+  .visual-body{
+    flex:1;
+    padding:10px;
+    position:relative;
+    min-height:220px;
+  }
+  .visual-empty-state{
+    height:100%;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; color:var(--text-secondary); font-size:12px;
+    padding:10px;
+  }
+
+  /* KPI card visual */
+  .kpi-body{
+    height:100%; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:4px;
+  }
+  .kpi-value{ font-size:34px; font-weight:600; color:var(--d1); line-height:1; }
+  .kpi-label{ font-size:11.5px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.4px; }
+
+  /* Table visual */
+  .table-scroll{ height:100%; overflow:auto; }
+  table.data-table{ width:100%; border-collapse:collapse; font-size:11.5px; }
+  table.data-table th{
+    position:sticky; top:0; background:var(--card);
+    text-align:left; padding:6px 8px; border-bottom:2px solid var(--pbi-yellow);
+    color:var(--text); font-weight:600;
+  }
+  table.data-table td{
+    padding:5px 8px; border-bottom:1px solid var(--border); color:var(--text);
+  }
+  table.data-table tr:hover td{ background:rgba(242,200,17,0.08); }
+
+  /* Slicer visual */
+  .slicer-body select{
+    width:100%;
+  }
+
+  /* ---- Visualization pane (right) ---- */
+  .viz-pane{
+    width:260px;
+    flex:none;
+    background:var(--card);
+    border-left:1px solid var(--border);
+    overflow-y:auto;
+    padding:12px 12px 30px;
+  }
+  .viz-pane .placeholder{
+    font-size:12.5px; color:var(--text-secondary); line-height:1.6; padding:6px 2px;
+  }
+  .type-grid{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:6px;
+    margin-bottom:16px;
+  }
+  .type-btn{
+    aspect-ratio:1;
+    border:1px solid var(--border);
+    background:var(--canvas);
+    border-radius:4px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--text-secondary);
+    padding:6px;
+  }
+  .type-btn svg{ width:100%; height:100%; }
+  .type-btn:hover{ border-color:var(--pbi-yellow); }
+  .type-btn.active{
+    border-color:var(--pbi-yellow);
+    background:rgba(242,200,17,0.15);
+    color:var(--text);
+  }
+  .field-well{ margin-bottom:14px; }
+  .field-well-label{
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.4px; color:var(--text-secondary); margin-bottom:6px;
+    display:flex; align-items:center; gap:5px;
+  }
+  .well-box{
+    border:1px dashed var(--border);
+    border-radius:3px;
+    padding:6px;
+    min-height:34px;
+    background:var(--canvas);
+  }
+  select, .pbi-select{
+    width:100%;
+    font-family:inherit;
+    font-size:12.5px;
+    padding:6px 8px;
+    border-radius:3px;
+    border:1px solid var(--border);
+    background:var(--card);
+    color:var(--text);
+  }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(1,184,170,0.12);
+    border:1px solid rgba(1,184,170,0.4);
+    color:var(--text);
+    font-size:12px;
+    padding:4px 8px;
+    border-radius:3px;
+    width:100%;
+  }
+  .chip .dot{ width:8px; height:8px; border-radius:50%; background:var(--d1); flex:none; }
+  .chip .x{
+    margin-left:auto; cursor:pointer; color:var(--text-secondary); font-size:13px;
+  }
+  .agg-row{ display:flex; align-items:center; gap:6px; margin-top:6px; }
+  .agg-row label{ font-size:11px; color:var(--text-secondary); white-space:nowrap; }
+  .section-title{
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text-secondary);
+    margin:16px 0 8px; padding-top:14px; border-top:1px solid var(--border);
+  }
+  .swatch-row{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .swatch{
+    width:20px; height:20px; border-radius:3px; cursor:pointer;
+    border:2px solid transparent;
+  }
+  .swatch.active{ border-color:var(--text); }
+
+  /* scrollbars, subtle */
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(128,128,128,.35); border-radius:5px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+
+  @media (max-width: 900px){
+    .fields-pane, .viz-pane{ display:none; }
+  }
+
+  .app-footer{
+    height:26px;
+    background:var(--pbi-header);
+    border-top:1px solid #3B3B3B;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    padding:0 14px;
+    gap:6px;
+  }
+  .app-footer .dot{
+    width:6px;height:6px;border-radius:50%;background:var(--pbi-yellow);flex:none;
+  }
+  .app-footer span{
+    color:#A19F9D;
+    font-size:10.5px;
+    letter-spacing:.3px;
+  }
+</style>
+</head>
+<body>
+
+<div class="ribbon">
+  <div class="brand">
+    <div class="logo"></div>
+    <span>CSV Dashboard Builder</span>
+  </div>
+  <div class="ribbon-divider"></div>
+
+  <button class="ribbon-btn primary" id="getDataBtn">
+    <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10 4.5 6.5M8 10l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Get Data
+  </button>
+  <input type="file" id="csvInput" accept=".csv" multiple>
+
+  <button class="ribbon-btn" id="addVisualBtn" disabled>
+    <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.5v5M5.5 8h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    New Visual
+  </button>
+
+  <button class="ribbon-btn" id="addSlicerBtn" disabled>
+    <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 8h12M2 13h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="5" cy="3" r="1.6" fill="currentColor"/><circle cx="11" cy="8" r="1.6" fill="currentColor"/><circle cx="6" cy="13" r="1.6" fill="currentColor"/></svg>
+    New Slicer
+  </button>
+
+  <span class="file-tag" id="fileTag" style="display:none;"></span>
+
+  <div class="ribbon-spacer"></div>
+
+  <div class="theme-toggle">
+    <span>Dark canvas</span>
+    <div class="switch" id="themeSwitch"><div class="knob"></div></div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- FIELDS PANE -->
+  <div class="fields-pane">
+    <div class="pane-title">Fields</div>
+    <div id="fieldsList">
+      <div class="field-empty">No data yet. Click <strong>Get Data</strong> and choose one or more CSV files to populate this list.</div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap">
+    <div id="canvasArea">
+      <div class="empty-canvas" id="emptyState">
+        <svg class="big-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="12" width="4" height="8" rx=".5" fill="currentColor" opacity=".85"/><rect x="10" y="7" width="4" height="13" rx=".5" fill="currentColor"/><rect x="17" y="3" width="4" height="17" rx=".5" fill="currentColor" opacity=".55"/></svg>
+        <h2>Start your report</h2>
+        <p>Load one or more CSV files, then add visuals and choose what to plot against what — just like building a report page in Power BI.</p>
+        <button class="ribbon-btn primary" id="emptyGetDataBtn" style="color:var(--pbi-header-2);">Get Data</button>
+      </div>
+      <div class="canvas-grid" id="canvasGrid" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- VISUALIZATION PANE -->
+  <div class="viz-pane">
+    <div class="pane-title">Visualization</div>
+    <div id="vizPaneBody">
+      <div class="placeholder">Select a visual on the canvas to choose its chart type and the fields it plots.</div>
+    </div>
+  </div>
+</div>
+
+<div class="app-footer">
+  <div class="dot"></div>
+  <span>Built by Nova Agentic</span>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- State ----------------
+  const state = {
+    tables: [],      // [{name, columns:[{name,type}], rows:[...]}]
+    columns: [],      // merged column list [{name,type,table}]
+    rows: [],         // merged rows (only used when single table; multi tables kept separate per-visual via table field)
+    visuals: [],       // [{id,type,table,axis,values,agg,color,filterField,filterValue}]
+    selectedVisualId: null,
+    theme: 'light'
+  };
+  let idCounter = 1;
+  const chartInstances = {};
+
+  const PALETTE = ['#01B8AA','#374649','#FD625E','#F2C80F','#5F6B6D','#8AD4EB','#FE9666','#A66999','#3599B8','#DFBFBF'];
+
+  const CHART_TYPES = [
+    { id:'bar',    label:'Bar chart',    icon: iconBar() },
+    { id:'line',   label:'Line chart',   icon: iconLine() },
+    { id:'area',   label:'Area chart',   icon: iconArea() },
+    { id:'pie',    label:'Pie chart',    icon: iconPie() },
+    { id:'doughnut', label:'Donut chart', icon: iconDonut() },
+    { id:'scatter',label:'Scatter chart',icon: iconScatter() },
+    { id:'kpi',    label:'Card (KPI)',   icon: iconKpi() },
+    { id:'table',  label:'Table',        icon: iconTable() },
+  ];
+
+  // ---------------- Icons (inline SVG strings) ----------------
+  function iconBar(){ return '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="12" width="4" height="8" fill="currentColor" opacity=".55"/><rect x="10" y="6" width="4" height="14" fill="currentColor"/><rect x="17" y="9" width="4" height="11" fill="currentColor" opacity=".8"/></svg>'; }
+  function iconLine(){ return '<svg viewBox="0 0 24 24" fill="none"><path d="M3 17l5-6 4 4 8-10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+  function iconArea(){ return '<svg viewBox="0 0 24 24" fill="none"><path d="M3 17l5-6 4 4 8-10v12H3z" fill="currentColor" opacity=".35"/><path d="M3 17l5-6 4 4 8-10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+  function iconPie(){ return '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 7.07 17.07L12 12V2z" fill="currentColor"/><path d="M12 2a10 10 0 0 1 7.07 17.07L12 12V2z" fill="currentColor" opacity=".45"/></svg>'; }
+  function iconDonut(){ return '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="currentColor" opacity=".35"/><circle cx="12" cy="12" r="4.2" fill="var(--card, #fff)"/></svg>'; }
+  function iconScatter(){ return '<svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="16" r="1.6" fill="currentColor"/><circle cx="11" cy="9" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="1.6" fill="currentColor"/><circle cx="19" cy="6" r="1.6" fill="currentColor"/><circle cx="9" cy="18" r="1.6" fill="currentColor"/></svg>'; }
+  function iconKpi(){ return '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="1.5" stroke="currentColor" stroke-width="1.6"/><text x="7" y="15.5" font-size="8" fill="currentColor" font-family="sans-serif">42</text></svg>'; }
+  function iconTable(){ return '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h18M3 14h18M9 4v16" stroke="currentColor" stroke-width="1.2"/></svg>'; }
+
+  // ---------------- DOM refs ----------------
+  const csvInput = document.getElementById('csvInput');
+  const getDataBtn = document.getElementById('getDataBtn');
+  const emptyGetDataBtn = document.getElementById('emptyGetDataBtn');
+  const addVisualBtn = document.getElementById('addVisualBtn');
+  const addSlicerBtn = document.getElementById('addSlicerBtn');
+  const fileTag = document.getElementById('fileTag');
+  const fieldsList = document.getElementById('fieldsList');
+  const emptyState = document.getElementById('emptyState');
+  const canvasGrid = document.getElementById('canvasGrid');
+  const vizPaneBody = document.getElementById('vizPaneBody');
+  const themeSwitch = document.getElementById('themeSwitch');
+
+  getDataBtn.addEventListener('click', () => csvInput.click());
+  emptyGetDataBtn.addEventListener('click', () => csvInput.click());
+  csvInput.addEventListener('change', handleFiles);
+  addVisualBtn.addEventListener('click', () => addVisual('bar'));
+  addSlicerBtn.addEventListener('click', () => addVisual('slicer'));
+  themeSwitch.addEventListener('click', toggleTheme);
+
+  function toggleTheme(){
+    state.theme = state.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', state.theme);
+    themeSwitch.classList.toggle('on', state.theme === 'dark');
+    renderAllCharts();
+  }
+
+  // ---------------- CSV ingestion ----------------
+  function handleFiles(e){
+    const files = Array.from(e.target.files || []);
+    if(!files.length) return;
+    let remaining = files.length;
+    const names = [];
+
+    files.forEach(file => {
+      Papa.parse(file, {
+        header:true,
+        dynamicTyping:false,
+        skipEmptyLines:true,
+        complete: function(results){
+          const rows = results.data;
+          const rawColumns = results.meta.fields || [];
+          const columns = rawColumns.map(name => ({
+            name,
+            type: detectType(rows, name)
+          }));
+          const tableName = file.name.replace(/\.csv$/i,'');
+          state.tables.push({ name: tableName, columns, rows });
+          names.push(tableName);
+          remaining--;
+          if(remaining === 0) onAllFilesLoaded(names);
+        },
+        error: function(err){
+          remaining--;
+          alert('Could not parse ' + file.name + ': ' + err.message);
+          if(remaining === 0) onAllFilesLoaded(names);
+        }
+      });
+    });
+  }
+
+  function detectType(rows, col){
+    let numCount=0, dateCount=0, total=0;
+    for(let i=0;i<Math.min(rows.length,60);i++){
+      const v = rows[i][col];
+      if(v === undefined || v === null || String(v).trim() === '') continue;
+      total++;
+      const s = String(v).trim();
+      if(s !== '' && !isNaN(Number(s.replace(/,/g,'')))){ numCount++; continue; }
+      const t = Date.parse(s);
+      if(!isNaN(t) && /[\/\-]|[A-Za-z]{3,}/.test(s)){ dateCount++; continue; }
+    }
+    if(total === 0) return 'text';
+    if(numCount/total > 0.8) return 'number';
+    if(dateCount/total > 0.7) return 'date';
+    return 'text';
+  }
+
+  function onAllFilesLoaded(names){
+    csvInput.value = '';
+    fileTag.style.display = 'inline-block';
+    const totalRows = state.tables.reduce((a,t)=>a+t.rows.length,0);
+    fileTag.textContent = state.tables.length + ' table' + (state.tables.length>1?'s':'') + ' · ' + totalRows + ' rows';
+    addVisualBtn.disabled = false;
+    addSlicerBtn.disabled = false;
+    renderFieldsPane();
+    if(state.visuals.length === 0){
+      addVisual('bar');
+    }
+  }
+
+  // ---------------- Fields pane ----------------
+  function renderFieldsPane(){
+    if(state.tables.length === 0){
+      fieldsList.innerHTML = '<div class="field-empty">No data yet. Click <strong>Get Data</strong> and choose one or more CSV files to populate this list.</div>';
+      return;
+    }
+    fieldsList.innerHTML = state.tables.map(table => {
+      const rowsHtml = table.columns.map(c => {
+        const cls = c.type === 'number' ? 'ft-num' : (c.type === 'date' ? 'ft-date' : 'ft-text');
+        const glyph = c.type === 'number' ? 'Σ' : (c.type === 'date' ? '📅' : 'Abc');
+        return '<div class="field-row" title="'+escapeAttr(c.name)+' ('+c.type+')">'+
+          '<span class="field-type-icon '+cls+'">'+ (c.type==='date' ? '' : glyph) + (c.type==='date' ? dateGlyph() : '') +'</span>'+
+          '<span>'+escapeHtml(c.name)+'</span>'+
+        '</div>';
+      }).join('');
+      return '<div class="field-table-group">'+
+        '<div class="field-table-name">'+ tableGlyph() +'<span>'+escapeHtml(table.name)+'</span></div>'+
+        rowsHtml +
+      '</div>';
+    }).join('');
+  }
+  function tableGlyph(){ return '<svg class="field-table-icon" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 6.5h13M6 2.5v11" stroke="currentColor" stroke-width="1"/></svg>'; }
+  function dateGlyph(){ return '📅'; }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  // ---------------- Visuals ----------------
+  function addVisual(type){
+    const table = state.tables[0]; // default to first table; user can change per-visual
+    const numCol = table.columns.find(c=>c.type==='number');
+    const catCol = table.columns.find(c=>c.type!=='number') || table.columns[0];
+
+    const visual = {
+      id: 'v' + (idCounter++),
+      type: type === 'slicer' ? 'slicer' : type,
+      table: table.name,
+      axis: catCol ? catCol.name : (table.columns[0] && table.columns[0].name),
+      values: numCol ? [numCol.name] : [],
+      agg: 'sum',
+      colorIndex: state.visuals.length % PALETTE.length,
+      filterField: catCol ? catCol.name : (table.columns[0] && table.columns[0].name),
+      filterValue: '__all__'
+    };
+    state.visuals.push(visual);
+    state.selectedVisualId = visual.id;
+    renderCanvas();
+    renderVizPane();
+  }
+
+  function removeVisual(id, evt){
+    if(evt) evt.stopPropagation();
+    state.visuals = state.visuals.filter(v => v.id !== id);
+    if(chartInstances[id]){ chartInstances[id].destroy(); delete chartInstances[id]; }
+    if(state.selectedVisualId === id) state.selectedVisualId = null;
+    renderCanvas();
+    renderVizPane();
+  }
+
+  function selectVisual(id){
+    state.selectedVisualId = id;
+    document.querySelectorAll('.visual-card').forEach(el => {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+    renderVizPane();
+  }
+
+  function getVisual(id){ return state.visuals.find(v => v.id === id); }
+  function getTable(name){ return state.tables.find(t => t.name === name); }
+
+  // Applies any slicer filters to a table's rows
+  function getFilteredRows(tableName){
+    const table = getTable(tableName);
+    if(!table) return [];
+    let rows = table.rows;
+    state.visuals.filter(v => v.type === 'slicer' && v.table === tableName && v.filterValue !== '__all__').forEach(s => {
+      rows = rows.filter(r => String(r[s.filterField]) === s.filterValue);
+    });
+    return rows;
+  }
+
+  function renderCanvas(){
+    if(state.visuals.length === 0){
+      emptyState.style.display = 'flex';
+      canvasGrid.style.display = 'none';
+      return;
+    }
+    emptyState.style.display = 'none';
+    canvasGrid.style.display = 'grid';
+
+    canvasGrid.innerHTML = state.visuals.map(v => {
+      const typeInfo = CHART_TYPES.find(t=>t.id===v.type);
+      const label = typeInfo ? typeInfo.label : 'Slicer';
+      const title = v.type === 'slicer' ? ('Filter: ' + v.filterField) : (v.axis ? v.axis + ' by ' + (v.values[0] || '—') : 'New visual');
+      return '<div class="visual-card '+(v.type==='slicer'?'slicer-card':'')+'" data-id="'+v.id+'" tabindex="0">'+
+        '<div class="visual-header">'+
+          '<span class="visual-title">'+escapeHtml(title)+'</span>'+
+          '<span class="visual-type-chip">'+label+'</span>'+
+          '<button class="visual-remove" data-remove="'+v.id+'" title="Remove visual">✕</button>'+
+        '</div>'+
+        '<div class="visual-body" id="body-'+v.id+'"></div>'+
+      '</div>';
+    }).join('');
+
+    state.visuals.forEach(v => {
+      const card = canvasGrid.querySelector('[data-id="'+v.id+'"]');
+      card.addEventListener('click', () => selectVisual(v.id));
+      const removeBtn = card.querySelector('[data-remove]');
+      removeBtn.addEventListener('click', (e) => removeVisual(v.id, e));
+      if(state.selectedVisualId === v.id) card.classList.add('selected');
+      renderVisualBody(v);
+    });
+  }
+
+  function renderVisualBody(v){
+    const body = document.getElementById('body-' + v.id);
+    if(!body) return;
+    const table = getTable(v.table);
+    if(!table){ body.innerHTML = '<div class="visual-empty-state">No data source.</div>'; return; }
+
+    if(v.type === 'slicer'){
+      renderSlicerBody(v, body, table);
+      return;
+    }
+
+    if(!v.axis || (v.type !== 'table' && v.type !== 'kpi' && v.values.length === 0)){
+      body.innerHTML = '<div class="visual-empty-state">Select this visual, then choose an Axis and Values field in the Visualization pane.</div>';
+      return;
+    }
+
+    const rows = getFilteredRows(v.table);
+
+    if(v.type === 'kpi') return renderKpiBody(v, body, rows);
+    if(v.type === 'table') return renderTableBody(v, body, rows, table);
+
+    renderChartBody(v, body, rows);
+  }
+
+  function renderSlicerBody(v, body, table){
+    const col = table.columns.find(c => c.name === v.filterField) || table.columns[0];
+    const values = Array.from(new Set(table.rows.map(r => r[col.name]))).filter(x => x !== undefined && x !== '').sort();
+    body.innerHTML = '<div class="slicer-body">'+
+      '<select data-slicer-value="'+v.id+'">'+
+        '<option value="__all__">(All)</option>'+
+        values.map(val => '<option value="'+escapeAttr(val)+'" '+(v.filterValue===String(val)?'selected':'')+'>'+escapeHtml(val)+'</option>').join('')+
+      '</select>'+
+    '</div>';
+    const sel = body.querySelector('select');
+    sel.addEventListener('click', e => e.stopPropagation());
+    sel.addEventListener('change', e => {
+      v.filterValue = e.target.value;
+      renderCanvas(); // re-render everything since slicer affects other visuals sharing the table
+    });
+  }
+
+  function aggregate(rows, axisField, valueField, agg){
+    const groups = new Map();
+    rows.forEach(r => {
+      const key = r[axisField] === undefined || r[axisField] === '' ? '(blank)' : r[axisField];
+      const raw = r[valueField];
+      const num = raw === undefined || raw === '' ? NaN : Number(String(raw).replace(/,/g,''));
+      if(!groups.has(key)) groups.set(key, []);
+      if(!isNaN(num)) groups.get(key).push(num);
+      else if(agg === 'count') groups.get(key).push(0);
+    });
+    const labels = Array.from(groups.keys());
+    const values = labels.map(k => {
+      const arr = groups.get(k);
+      if(arr.length === 0) return 0;
+      switch(agg){
+        case 'sum': return arr.reduce((a,b)=>a+b,0);
+        case 'average': return arr.reduce((a,b)=>a+b,0)/arr.length;
+        case 'count': return arr.length;
+        case 'min': return Math.min(...arr);
+        case 'max': return Math.max(...arr);
+        default: return arr.reduce((a,b)=>a+b,0);
+      }
+    });
+    return { labels, values };
+  }
+
+  function renderKpiBody(v, body, rows){
+    const valField = v.values[0];
+    let display = '—';
+    if(valField){
+      const nums = rows.map(r => Number(String(r[valField]).replace(/,/g,''))).filter(n => !isNaN(n));
+      let result;
+      switch(v.agg){
+        case 'average': result = nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0; break;
+        case 'count': result = rows.length; break;
+        case 'min': result = nums.length ? Math.min(...nums) : 0; break;
+        case 'max': result = nums.length ? Math.max(...nums) : 0; break;
+        default: result = nums.reduce((a,b)=>a+b,0);
+      }
+      display = formatNumber(result);
+    }
+    body.innerHTML = '<div class="kpi-body">'+
+      '<div class="kpi-value">'+display+'</div>'+
+      '<div class="kpi-label">'+escapeHtml((v.agg||'sum'))+' of '+escapeHtml(valField||'')+'</div>'+
+    '</div>';
+  }
+
+  function formatNumber(n){
+    if(Math.abs(n) >= 1000000) return (n/1000000).toFixed(2)+'M';
+    if(Math.abs(n) >= 1000) return (n/1000).toFixed(1)+'K';
+    return Math.round(n*100)/100;
+  }
+
+  function renderTableBody(v, body, rows, table){
+    const cols = v.values.length ? [v.axis, ...v.values] : table.columns.map(c=>c.name);
+    const shown = rows.slice(0, 200);
+    body.innerHTML = '<div class="table-scroll"><table class="data-table"><thead><tr>'+
+      cols.map(c=>'<th>'+escapeHtml(c)+'</th>').join('')+
+      '</tr></thead><tbody>'+
+      shown.map(r => '<tr>'+cols.map(c=>'<td>'+escapeHtml(r[c] !== undefined ? r[c] : '')+'</td>').join('')+'</tr>').join('')+
+      '</tbody></table></div>';
+  }
+
+  function renderChartBody(v, body, rows){
+    body.innerHTML = '<canvas id="chart-'+v.id+'"></canvas>';
+    const ctx = document.getElementById('chart-' + v.id).getContext('2d');
+
+    if(chartInstances[v.id]){ chartInstances[v.id].destroy(); }
+
+    const gridColor = state.theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tickColor = state.theme === 'dark' ? '#C8C6C4' : '#605E5C';
+    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+    if(v.type === 'scatter'){
+      const valField = v.values[0];
+      const points = rows.map(r => ({ x: Number(r[v.axis]), y: Number(String(r[valField]).replace(/,/g,'')) }))
+        .filter(p => !isNaN(p.x) && !isNaN(p.y));
+      chartInstances[v.id] = new Chart(ctx, {
+        type:'scatter',
+        data:{ datasets:[{ label: valField, data: points, backgroundColor: PALETTE[v.colorIndex] }] },
+        options: baseOptions(gridColor, tickColor, true)
+      });
+      return;
+    }
+
+    let labels, datasets;
+    const isPie = v.type === 'pie' || v.type === 'doughnut';
+
+    if(isPie){
+      const valField = v.values[0];
+      const { labels: L, values: V } = aggregate(rows, v.axis, valField, v.agg);
+      labels = L;
+      datasets = [{ data: V, backgroundColor: labels.map((_,i)=>PALETTE[i % PALETTE.length]), borderColor: state.theme==='dark' ? '#2B2B2B' : '#fff', borderWidth: 2 }];
+    } else {
+      const first = aggregate(rows, v.axis, v.values[0], v.agg);
+      labels = first.labels;
+      datasets = v.values.map((valField, i) => {
+        const { values } = aggregate(rows, v.axis, valField, v.agg);
+        const color = PALETTE[(v.colorIndex + i) % PALETTE.length];
+        return {
+          label: valField,
+          data: values,
+          backgroundColor: v.type === 'line' ? 'transparent' : (v.type==='area' ? hexToRgba(color,0.25) : color),
+          borderColor: color,
+          fill: v.type === 'area',
+          tension: v.type === 'area' || v.type === 'line' ? 0.3 : 0,
+          borderWidth: v.type === 'line' || v.type === 'area' ? 2.5 : 1,
+          pointRadius: v.type === 'line' || v.type === 'area' ? 2 : 0,
+        };
+      });
+    }
+
+    const chartType = v.type === 'area' ? 'line' : v.type;
+
+    chartInstances[v.id] = new Chart(ctx, {
+      type: chartType,
+      data: { labels, datasets },
+      options: baseOptions(gridColor, tickColor, false, isPie)
+    });
+  }
+
+  function hexToRgba(hex, alpha){
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return 'rgba('+r+','+g+','+b+','+alpha+')';
+  }
+
+  function baseOptions(gridColor, tickColor, isScatter, isPie){
+    return {
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{
+          display: isPie || true,
+          position: 'bottom',
+          labels:{ color: tickColor, boxWidth:10, font:{size:11} }
+        },
+        tooltip:{ backgroundColor: '#252423', titleColor:'#fff', bodyColor:'#fff' }
+      },
+      scales: isPie ? {} : {
+        x:{ grid:{ color: gridColor }, ticks:{ color: tickColor, font:{size:10.5} } },
+        y:{ grid:{ color: gridColor }, ticks:{ color: tickColor, font:{size:10.5} }, beginAtZero:true }
+      }
+    };
+  }
+
+  function renderAllCharts(){
+    state.visuals.forEach(v => renderVisualBody(v));
+  }
+
+  // ---------------- Visualization pane (right) ----------------
+  function renderVizPane(){
+    const v = getVisual(state.selectedVisualId);
+    if(!v){
+      vizPaneBody.innerHTML = '<div class="placeholder">Select a visual on the canvas to choose its chart type and the fields it plots.</div>';
+      return;
+    }
+    const table = getTable(v.table);
+    const tableOptions = state.tables.map(t => '<option value="'+escapeAttr(t.name)+'" '+(t.name===v.table?'selected':'')+'>'+escapeHtml(t.name)+'</option>').join('');
+
+    if(v.type === 'slicer'){
+      const fieldOptions = table.columns.map(c => '<option value="'+escapeAttr(c.name)+'" '+(c.name===v.filterField?'selected':'')+'>'+escapeHtml(c.name)+'</option>').join('');
+      vizPaneBody.innerHTML =
+        '<div class="field-well"><div class="field-well-label">Data table</div><select id="tableSelect">'+tableOptions+'</select></div>'+
+        '<div class="field-well"><div class="field-well-label">Filter field</div><select id="filterFieldSelect">'+fieldOptions+'</select></div>'+
+        '<div class="placeholder">This slicer filters every visual on the canvas that reads from the same table.</div>';
+      document.getElementById('tableSelect').addEventListener('change', e => { v.table = e.target.value; v.filterField = getTable(v.table).columns[0].name; v.filterValue='__all__'; renderVizPane(); renderCanvas(); });
+      document.getElementById('filterFieldSelect').addEventListener('change', e => { v.filterField = e.target.value; v.filterValue = '__all__'; renderCanvas(); });
+      return;
+    }
+
+    const typeGrid = CHART_TYPES.map(t =>
+      '<div class="type-btn '+(v.type===t.id?'active':'')+'" data-type="'+t.id+'" title="'+t.label+'">'+t.icon+'</div>'
+    ).join('');
+
+    const numericCols = table.columns.filter(c => c.type === 'number');
+    const allCols = table.columns;
+
+    const axisOptions = allCols.map(c => '<option value="'+escapeAttr(c.name)+'" '+(c.name===v.axis?'selected':'')+'>'+escapeHtml(c.name)+'</option>').join('');
+    const valueOptions = (numericCols.length ? numericCols : allCols).map(c => '<option value="'+escapeAttr(c.name)+'">'+escapeHtml(c.name)+'</option>').join('');
+
+    const isTableType = v.type === 'table';
+    const isKpi = v.type === 'kpi';
+    const axisLabel = isKpi ? 'Filter (unused)' : (isTableType ? 'Primary column' : (v.type==='scatter' ? 'X axis' : 'Axis'));
+    const valuesLabel = v.type==='scatter' ? 'Y value' : 'Values';
+
+    const valuesChips = v.values.map(val =>
+      '<div class="chip"><span class="dot"></span><span>'+escapeHtml(val)+'</span><span class="x" data-remove-value="'+escapeAttr(val)+'">✕</span></div>'
+    ).join('');
+
+    const showAgg = !isTableType && v.type !== 'scatter';
+    const allowMultiValues = !isTableType && !isKpi && v.type !== 'pie' && v.type !== 'doughnut' && v.type !== 'scatter';
+
+    vizPaneBody.innerHTML =
+      '<div class="type-grid">'+typeGrid+'</div>'+
+      '<div class="field-well"><div class="field-well-label">Data table</div><select id="tableSelect">'+tableOptions+'</select></div>'+
+      (isKpi ? '' : '<div class="field-well"><div class="field-well-label">'+axisLabel+'</div><select id="axisSelect">'+axisOptions+'</select></div>') +
+      '<div class="field-well">'+
+        '<div class="field-well-label">'+valuesLabel+'</div>'+
+        '<div class="well-box">'+
+          (valuesChips || '<div style="font-size:11.5px;color:var(--text-secondary);">Choose a field below</div>')+
+        '</div>'+
+        '<select id="addValueSelect" style="margin-top:6px;"><option value="">+ Add field…</option>'+valueOptions+'</select>'+
+        (showAgg ? '<div class="agg-row"><label>Summarize:</label><select id="aggSelect">'+
+          ['sum','average','count','min','max'].map(a=>'<option value="'+a+'" '+(v.agg===a?'selected':'')+'>'+a+'</option>').join('')+
+        '</select></div>' : '')+
+      '</div>'+
+      '<div class="section-title">Color</div>'+
+      '<div class="swatch-row" id="swatchRow">'+
+        PALETTE.map((c,i)=>'<div class="swatch '+(v.colorIndex===i?'active':'')+'" style="background:'+c+'" data-color-index="'+i+'"></div>').join('')+
+      '</div>';
+
+    // Wire up events
+    document.getElementById('tableSelect').addEventListener('change', e => {
+      v.table = e.target.value;
+      const t = getTable(v.table);
+      v.axis = t.columns[0].name;
+      v.values = [];
+      renderVizPane(); renderCanvas();
+    });
+
+    document.querySelectorAll('.type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        v.type = btn.dataset.type;
+        if((v.type==='pie'||v.type==='doughnut'||v.type==='kpi') && v.values.length>1) v.values = v.values.slice(0,1);
+        renderVizPane(); renderCanvas();
+      });
+    });
+
+    const axisSelect = document.getElementById('axisSelect');
+    if(axisSelect) axisSelect.addEventListener('change', e => { v.axis = e.target.value; renderCanvas(); });
+
+    const addValueSelect = document.getElementById('addValueSelect');
+    addValueSelect.addEventListener('change', e => {
+      const val = e.target.value;
+      if(!val) return;
+      if(!allowMultiValues) v.values = [val];
+      else if(!v.values.includes(val)) v.values.push(val);
+      renderVizPane(); renderCanvas();
+    });
+
+    document.querySelectorAll('[data-remove-value]').forEach(el => {
+      el.addEventListener('click', () => {
+        v.values = v.values.filter(x => x !== el.dataset.removeValue);
+        renderVizPane(); renderCanvas();
+      });
+    });
+
+    const aggSelect = document.getElementById('aggSelect');
+    if(aggSelect) aggSelect.addEventListener('change', e => { v.agg = e.target.value; renderCanvas(); });
+
+    document.querySelectorAll('[data-color-index]').forEach(el => {
+      el.addEventListener('click', () => {
+        v.colorIndex = Number(el.dataset.colorIndex);
+        renderVizPane(); renderCanvas();
+      });
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
