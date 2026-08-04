@@ -6,7 +6,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CSV Dashboard Builder</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>window.Papa || document.write('<script src="https:\/\/cdn.jsdelivr.net\/npm\/papaparse@5.4.1\/papaparse.min.js"><\/script>');</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script>window.Chart || document.write('<script src="https:\/\/cdn.jsdelivr.net\/npm\/chart.js@4.4.4\/dist\/chart.umd.min.js"><\/script>');</script>
 <style>
   :root{
     /* ---- Power BI token system ---- */
@@ -428,9 +430,83 @@
     font-size:10.5px;
     letter-spacing:.3px;
   }
+
+  .lib-fail-banner{
+    display:none;
+    background:#FD625E;
+    color:#fff;
+    font-size:13px;
+    padding:10px 16px;
+    align-items:center;
+    gap:12px;
+  }
+  .lib-fail-banner button{
+    background:#fff; color:#B02A26; border:none; border-radius:3px;
+    padding:5px 12px; font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+
+  /* ---- Help modal ---- */
+  .modal-overlay{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.45);
+    z-index:50;
+    align-items:center; justify-content:center;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{
+    background:var(--card); color:var(--text);
+    width:480px; max-width:92vw; max-height:82vh; overflow-y:auto;
+    border-radius:6px; border-top:4px solid var(--pbi-yellow);
+    box-shadow:0 8px 30px rgba(0,0,0,.3);
+    padding:22px 24px 24px;
+  }
+  .modal-box h2{ margin:0 0 4px; font-size:17px; }
+  .modal-box .modal-sub{ font-size:12.5px; color:var(--text-secondary); margin:0 0 16px; }
+  .modal-steps{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; }
+  .modal-steps li{ display:flex; gap:12px; }
+  .step-num{
+    flex:none; width:22px; height:22px; border-radius:50%;
+    background:var(--pbi-yellow); color:var(--pbi-header-2);
+    font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .step-text{ font-size:13px; line-height:1.5; }
+  .step-text strong{ display:block; margin-bottom:2px; }
+  .modal-close-row{ margin-top:20px; text-align:right; }
+  .modal-close-row button{
+    background:var(--pbi-yellow); color:var(--pbi-header-2); border:none;
+    font-weight:600; font-size:12.5px; padding:8px 16px; border-radius:3px; cursor:pointer;
+  }
+  .help-btn{
+    width:28px; height:28px; border-radius:50%;
+    border:1px solid #4B4A48; background:transparent; color:#EDEBE9;
+    font-size:13px; font-weight:700; cursor:pointer; flex:none;
+  }
+  .help-btn:hover{ background:#383635; }
+
+  .field-legend{
+    display:flex; gap:10px; flex-wrap:wrap;
+    font-size:10.5px; color:var(--text-secondary);
+    margin-top:12px; padding-top:10px; border-top:1px solid var(--border);
+  }
+  .field-legend span{ display:flex; align-items:center; gap:4px; }
+  .field-well-hint{
+    font-size:11px; color:var(--text-secondary); margin:-4px 0 6px; line-height:1.4;
+  }
+  .well-label-row{ display:flex; align-items:center; justify-content:space-between; }
+  .auto-link{
+    font-size:10.5px; color:var(--d9); cursor:pointer; text-decoration:underline; font-weight:400; text-transform:none; letter-spacing:0;
+  }
+  .auto-link:hover{ color:var(--pbi-yellow-dark); }
 </style>
 </head>
 <body>
+
+<div class="lib-fail-banner" id="libFailBanner">
+  <span>⚠ Couldn't load a required library (<span id="libFailName">chart engine</span>). Check your internet connection or ad-blocker, then try again.</span>
+  <button onclick="location.reload()">Reload page</button>
+</div>
 
 <div class="ribbon">
   <div class="brand">
@@ -439,18 +515,18 @@
   </div>
   <div class="ribbon-divider"></div>
 
-  <button class="ribbon-btn primary" id="getDataBtn">
+  <button class="ribbon-btn primary" id="getDataBtn" title="Step 1: load your CSV file(s)">
     <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><path d="M8 1v9M8 10 4.5 6.5M8 10l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
     Get Data
   </button>
   <input type="file" id="csvInput" accept=".csv" multiple>
 
-  <button class="ribbon-btn" id="addVisualBtn" disabled>
+  <button class="ribbon-btn" id="addVisualBtn" disabled title="Step 2: add a chart to the canvas">
     <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.5v5M5.5 8h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
     New Visual
   </button>
 
-  <button class="ribbon-btn" id="addSlicerBtn" disabled>
+  <button class="ribbon-btn" id="addSlicerBtn" disabled title="Optional: add a filter dropdown">
     <svg class="ribbon-icon" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 8h12M2 13h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="5" cy="3" r="1.6" fill="currentColor"/><circle cx="11" cy="8" r="1.6" fill="currentColor"/><circle cx="6" cy="13" r="1.6" fill="currentColor"/></svg>
     New Slicer
   </button>
@@ -459,9 +535,25 @@
 
   <div class="ribbon-spacer"></div>
 
+  <button class="help-btn" id="helpBtn" title="How to use this tool">?</button>
+
   <div class="theme-toggle">
     <span>Dark canvas</span>
     <div class="switch" id="themeSwitch"><div class="knob"></div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="helpModal">
+  <div class="modal-box">
+    <h2>How this tool works</h2>
+    <p class="modal-sub">Four steps to a working dashboard.</p>
+    <ol class="modal-steps">
+      <li><span class="step-num">1</span><span class="step-text"><strong>Click "Get Data."</strong> Choose one or more CSV files from your computer. The columns show up in the Fields list on the left.</span></li>
+      <li><span class="step-num">2</span><span class="step-text"><strong>Click "New Visual."</strong> A chart card appears on the canvas with a chart type and fields already picked for you.</span></li>
+      <li><span class="step-num">3</span><span class="step-text"><strong>Click the chart card to select it.</strong> The Visualization panel on the right appears. Change the chart type, or change what's on the <strong>Axis</strong> (the category, like Region) and <strong>Values</strong> (the number, like Revenue).</span></li>
+      <li><span class="step-num">4</span><span class="step-text"><strong>Repeat</strong> to add more charts. Add a <strong>Slicer</strong> to get a dropdown filter that narrows every chart using the same data at once.</span></li>
+    </ol>
+    <div class="modal-close-row"><button id="closeHelpBtn">Got it</button></div>
   </div>
 </div>
 
@@ -470,7 +562,7 @@
   <div class="fields-pane">
     <div class="pane-title">Fields</div>
     <div id="fieldsList">
-      <div class="field-empty">No data yet. Click <strong>Get Data</strong> and choose one or more CSV files to populate this list.</div>
+      <div class="field-empty">No data yet. Click <strong>Get Data</strong> above and choose one or more CSV files to populate this list.</div>
     </div>
   </div>
 
@@ -480,7 +572,7 @@
       <div class="empty-canvas" id="emptyState">
         <svg class="big-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="12" width="4" height="8" rx=".5" fill="currentColor" opacity=".85"/><rect x="10" y="7" width="4" height="13" rx=".5" fill="currentColor"/><rect x="17" y="3" width="4" height="17" rx=".5" fill="currentColor" opacity=".55"/></svg>
         <h2>Start your report</h2>
-        <p>Load one or more CSV files, then add visuals and choose what to plot against what — just like building a report page in Power BI.</p>
+        <p>Load a CSV, click New Visual, then click the chart to choose what plots against what — just like building a report page in Power BI. Click the <strong>?</strong> button (top right) for a full walkthrough.</p>
         <button class="ribbon-btn primary" id="emptyGetDataBtn" style="color:var(--pbi-header-2);">Get Data</button>
       </div>
       <div class="canvas-grid" id="canvasGrid" style="display:none;"></div>
@@ -504,6 +596,15 @@
 <script>
 (function(){
   "use strict";
+
+  if(typeof Papa === 'undefined' || typeof Chart === 'undefined'){
+    const missing = typeof Papa === 'undefined' ? 'CSV parser' : 'chart engine';
+    const nameEl = document.getElementById('libFailName');
+    if(nameEl) nameEl.textContent = missing;
+    const banner = document.getElementById('libFailBanner');
+    if(banner) banner.style.display = 'flex';
+    return; // don't wire up a UI that can't function
+  }
 
   // ---------------- State ----------------
   const state = {
@@ -552,6 +653,13 @@
   const canvasGrid = document.getElementById('canvasGrid');
   const vizPaneBody = document.getElementById('vizPaneBody');
   const themeSwitch = document.getElementById('themeSwitch');
+  const helpBtn = document.getElementById('helpBtn');
+  const helpModal = document.getElementById('helpModal');
+  const closeHelpBtn = document.getElementById('closeHelpBtn');
+
+  helpBtn.addEventListener('click', () => helpModal.classList.add('open'));
+  closeHelpBtn.addEventListener('click', () => helpModal.classList.remove('open'));
+  helpModal.addEventListener('click', (e) => { if(e.target === helpModal) helpModal.classList.remove('open'); });
 
   getDataBtn.addEventListener('click', () => csvInput.click());
   emptyGetDataBtn.addEventListener('click', () => csvInput.click());
@@ -601,6 +709,19 @@
     });
   }
 
+  function looksLikeDate(s){
+    // Only explicit, well-known date shapes count — this avoids false positives
+    // on ID-like text (e.g. "ORD-100001") that Date.parse's lenient fallback
+    // parser can otherwise misread as a date.
+    return (
+      /^\d{4}-\d{1,2}-\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/.test(s) ||          // 2025-01-31
+      /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s) ||                                    // 01/31/2025
+      /^\d{1,2}-\d{1,2}-\d{2,4}$/.test(s) ||                                      // 31-01-2025
+      /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}$/i.test(s) || // January 31, 2025
+      /^\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}$/i.test(s)      // 31 January 2025
+    );
+  }
+
   function detectType(rows, col){
     let numCount=0, dateCount=0, total=0;
     for(let i=0;i<Math.min(rows.length,60);i++){
@@ -609,8 +730,7 @@
       total++;
       const s = String(v).trim();
       if(s !== '' && !isNaN(Number(s.replace(/,/g,'')))){ numCount++; continue; }
-      const t = Date.parse(s);
-      if(!isNaN(t) && /[\/\-]|[A-Za-z]{3,}/.test(s)){ dateCount++; continue; }
+      if(looksLikeDate(s) && !isNaN(Date.parse(s))){ dateCount++; continue; }
     }
     if(total === 0) return 'text';
     if(numCount/total > 0.8) return 'number';
@@ -634,15 +754,15 @@
   // ---------------- Fields pane ----------------
   function renderFieldsPane(){
     if(state.tables.length === 0){
-      fieldsList.innerHTML = '<div class="field-empty">No data yet. Click <strong>Get Data</strong> and choose one or more CSV files to populate this list.</div>';
+      fieldsList.innerHTML = '<div class="field-empty">No data yet. Click <strong>Get Data</strong> above and choose one or more CSV files to populate this list.</div>';
       return;
     }
-    fieldsList.innerHTML = state.tables.map(table => {
+    const groups = state.tables.map(table => {
       const rowsHtml = table.columns.map(c => {
         const cls = c.type === 'number' ? 'ft-num' : (c.type === 'date' ? 'ft-date' : 'ft-text');
-        const glyph = c.type === 'number' ? 'Σ' : (c.type === 'date' ? '📅' : 'Abc');
-        return '<div class="field-row" title="'+escapeAttr(c.name)+' ('+c.type+')">'+
-          '<span class="field-type-icon '+cls+'">'+ (c.type==='date' ? '' : glyph) + (c.type==='date' ? dateGlyph() : '') +'</span>'+
+        const glyph = c.type === 'number' ? 'Σ' : (c.type === 'date' ? dateGlyph() : 'Abc');
+        return '<div class="field-row" title="'+escapeAttr(c.name)+' — '+c.type+'">'+
+          '<span class="field-type-icon '+cls+'">'+glyph+'</span>'+
           '<span>'+escapeHtml(c.name)+'</span>'+
         '</div>';
       }).join('');
@@ -651,6 +771,12 @@
         rowsHtml +
       '</div>';
     }).join('');
+    const legend = '<div class="field-legend">'+
+      '<span><span class="field-type-icon ft-num">Σ</span> number</span>'+
+      '<span><span class="field-type-icon ft-date">'+dateGlyph()+'</span> date</span>'+
+      '<span><span class="field-type-icon ft-text">Abc</span> text</span>'+
+    '</div>';
+    fieldsList.innerHTML = groups + legend;
   }
   function tableGlyph(){ return '<svg class="field-table-icon" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="11" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 6.5h13M6 2.5v11" stroke="currentColor" stroke-width="1"/></svg>'; }
   function dateGlyph(){ return '📅'; }
@@ -1031,9 +1157,15 @@
     vizPaneBody.innerHTML =
       '<div class="type-grid">'+typeGrid+'</div>'+
       '<div class="field-well"><div class="field-well-label">Data table</div><select id="tableSelect">'+tableOptions+'</select></div>'+
-      (isKpi ? '' : '<div class="field-well"><div class="field-well-label">'+axisLabel+'</div><select id="axisSelect">'+axisOptions+'</select></div>') +
+      (isKpi ? '' :
+        '<div class="field-well">'+
+          '<div class="well-label-row"><div class="field-well-label">'+axisLabel+'</div>'+(isTableType?'':'<span class="auto-link" id="autoAxisLink">Auto-pick</span>')+'</div>'+
+          '<div class="field-well-hint">The category rows are grouped by — e.g. Region or Product.</div>'+
+          '<select id="axisSelect">'+axisOptions+'</select>'+
+        '</div>') +
       '<div class="field-well">'+
         '<div class="field-well-label">'+valuesLabel+'</div>'+
+        '<div class="field-well-hint">The number being measured — e.g. Revenue or Units Sold.</div>'+
         '<div class="well-box">'+
           (valuesChips || '<div style="font-size:11.5px;color:var(--text-secondary);">Choose a field below</div>')+
         '</div>'+
@@ -1046,6 +1178,12 @@
       '<div class="swatch-row" id="swatchRow">'+
         PALETTE.map((c,i)=>'<div class="swatch '+(v.colorIndex===i?'active':'')+'" style="background:'+c+'" data-color-index="'+i+'"></div>').join('')+
       '</div>';
+
+    const autoAxisLink = document.getElementById('autoAxisLink');
+    if(autoAxisLink) autoAxisLink.addEventListener('click', () => {
+      v.axis = pickDefaultAxis(table);
+      renderVizPane(); renderCanvas();
+    });
 
     // Wire up events
     document.getElementById('tableSelect').addEventListener('change', e => {
