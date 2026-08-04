@@ -277,6 +277,12 @@
     position:relative;
     min-height:220px;
   }
+  .truncation-note{
+    font-size:10.5px;
+    color:var(--text-secondary);
+    text-align:center;
+    margin-bottom:4px;
+  }
   .visual-empty-state{
     height:100%;
     display:flex; align-items:center; justify-content:center;
@@ -653,20 +659,40 @@
   function escapeAttr(s){ return escapeHtml(s); }
 
   // ---------------- Visuals ----------------
+  function isIdLike(colName){
+    return /(^|[\s_-])id($|[\s_-])/i.test(colName) || /^id$/i.test(colName);
+  }
+
+  // Picks a sensible default category field: avoids ID-like columns and
+  // prefers lower-cardinality fields so the default chart isn't 12,000 slivers.
+  function pickDefaultAxis(table){
+    const nonNumeric = table.columns.filter(c => c.type !== 'number');
+    const candidates = nonNumeric.filter(c => !isIdLike(c.name));
+    const pool = candidates.length ? candidates : (nonNumeric.length ? nonNumeric : table.columns);
+    const sample = table.rows.slice(0, 500);
+    let best = pool[0], bestRatio = Infinity;
+    pool.forEach(c => {
+      const set = new Set(sample.map(r => r[c.name]));
+      const ratio = set.size / (sample.length || 1);
+      if(ratio < bestRatio){ bestRatio = ratio; best = c; }
+    });
+    return best ? best.name : (table.columns[0] && table.columns[0].name);
+  }
+
   function addVisual(type){
     const table = state.tables[0]; // default to first table; user can change per-visual
     const numCol = table.columns.find(c=>c.type==='number');
-    const catCol = table.columns.find(c=>c.type!=='number') || table.columns[0];
+    const axisFieldName = pickDefaultAxis(table);
 
     const visual = {
       id: 'v' + (idCounter++),
       type: type === 'slicer' ? 'slicer' : type,
       table: table.name,
-      axis: catCol ? catCol.name : (table.columns[0] && table.columns[0].name),
+      axis: axisFieldName,
       values: numCol ? [numCol.name] : [],
       agg: 'sum',
       colorIndex: state.visuals.length % PALETTE.length,
-      filterField: catCol ? catCol.name : (table.columns[0] && table.columns[0].name),
+      filterField: axisFieldName,
       filterValue: '__all__'
     };
     state.visuals.push(visual);
@@ -735,8 +761,18 @@
       const removeBtn = card.querySelector('[data-remove]');
       removeBtn.addEventListener('click', (e) => removeVisual(v.id, e));
       if(state.selectedVisualId === v.id) card.classList.add('selected');
-      renderVisualBody(v);
+      safeRenderVisualBody(v);
     });
+  }
+
+  function safeRenderVisualBody(v){
+    try{
+      renderVisualBody(v);
+    } catch(err){
+      console.error('Visual render error for', v.id, err);
+      const body = document.getElementById('body-' + v.id);
+      if(body) body.innerHTML = '<div class="visual-empty-state">Couldn\'t render this visual (' + escapeHtml(err.message) + '). Try a different Axis field.</div>';
+    }
   }
 
   function renderVisualBody(v){
@@ -892,6 +928,26 @@
       });
     }
 
+    // Cap the number of categories drawn — a high-cardinality axis (e.g. an ID
+    // column) would otherwise render as thousands of invisible slivers.
+    const MAX_CATEGORIES = 30;
+    let truncatedFrom = null;
+    if(labels.length > MAX_CATEGORIES){
+      truncatedFrom = labels.length;
+      const rankBy = datasets[0].data;
+      const order = labels.map((_,i)=>i).sort((a,b) => (rankBy[b]||0) - (rankBy[a]||0)).slice(0, MAX_CATEGORIES);
+      labels = order.map(i => labels[i]);
+      datasets = datasets.map(ds => ({
+        ...ds,
+        data: order.map(i => ds.data[i]),
+        backgroundColor: Array.isArray(ds.backgroundColor) ? order.map(i => ds.backgroundColor[i]) : ds.backgroundColor
+      }));
+    }
+
+    if(truncatedFrom){
+      body.insertAdjacentHTML('afterbegin', '<div class="truncation-note">Showing top '+MAX_CATEGORIES+' of '+truncatedFrom+' '+escapeHtml(v.axis)+' values, by '+escapeHtml(v.values[0])+'</div>');
+    }
+
     const chartType = v.type === 'area' ? 'line' : v.type;
 
     chartInstances[v.id] = new Chart(ctx, {
@@ -926,7 +982,7 @@
   }
 
   function renderAllCharts(){
-    state.visuals.forEach(v => renderVisualBody(v));
+    state.visuals.forEach(v => safeRenderVisualBody(v));
   }
 
   // ---------------- Visualization pane (right) ----------------
