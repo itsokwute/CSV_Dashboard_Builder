@@ -243,7 +243,7 @@
     box-shadow:0 1.6px 3.6px rgba(0,0,0,.08);
     display:flex;
     flex-direction:column;
-    min-height:300px;
+    height:360px;
     cursor:pointer;
     outline:none;
   }
@@ -251,11 +251,12 @@
     border-color:var(--pbi-yellow);
     box-shadow:0 0 0 1px var(--pbi-yellow), 0 1.6px 6px rgba(0,0,0,.12);
   }
-  .visual-card.slicer-card{ min-height:150px; }
+  .visual-card.slicer-card{ height:140px; }
   .visual-header{
     display:flex; align-items:center; gap:8px;
     padding:9px 10px;
     border-bottom:1px solid var(--border);
+    flex:none;
   }
   .visual-title{
     font-size:12.5px; font-weight:600; flex:1;
@@ -271,13 +272,15 @@
     background:none; border:none; cursor:pointer;
     color:var(--text-secondary); font-size:14px; line-height:1;
     padding:2px 4px; border-radius:3px;
+    flex:none;
   }
   .visual-remove:hover{ background:rgba(253,98,94,0.15); color:var(--d3); }
   .visual-body{
-    flex:1;
+    flex:1 1 0;
+    min-height:0;
+    overflow:hidden;
     padding:10px;
     position:relative;
-    min-height:220px;
   }
   .truncation-note{
     font-size:10.5px;
@@ -301,7 +304,8 @@
   .kpi-label{ font-size:11.5px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.4px; }
 
   /* Table visual */
-  .table-scroll{ height:100%; overflow:auto; }
+  .table-scroll{ height:100%; overflow:auto; flex:1; min-height:0; }
+  .table-wrap{ display:flex; flex-direction:column; height:100%; }
   table.data-table{ width:100%; border-collapse:collapse; font-size:11.5px; }
   table.data-table th{
     position:sticky; top:0; background:var(--card);
@@ -499,6 +503,51 @@
     font-size:10.5px; color:var(--d9); cursor:pointer; text-decoration:underline; font-weight:400; text-transform:none; letter-spacing:0;
   }
   .auto-link:hover{ color:var(--pbi-yellow-dark); }
+
+  .axis-warning{
+    background:rgba(253,98,94,0.12);
+    border:1px solid rgba(253,98,94,0.4);
+    color:var(--text);
+    font-size:11.5px;
+    line-height:1.4;
+    padding:8px 10px;
+    border-radius:3px;
+    margin-bottom:12px;
+  }
+  .title-input{
+    width:100%;
+    font-family:inherit;
+    font-size:12.5px;
+    padding:6px 8px;
+    border-radius:3px;
+    border:1px solid var(--border);
+    background:var(--card);
+    color:var(--text);
+    margin-bottom:14px;
+  }
+  .color-list{
+    max-height:180px;
+    overflow-y:auto;
+    display:flex; flex-direction:column; gap:5px;
+    margin-top:6px;
+    padding-right:2px;
+  }
+  .color-row{
+    display:flex; align-items:center; gap:8px;
+    font-size:12px;
+  }
+  .color-row input[type="color"]{
+    width:22px; height:22px; padding:0; border:1px solid var(--border);
+    border-radius:3px; background:none; cursor:pointer; flex:none;
+  }
+  .color-row span{
+    flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .table-footer{
+    font-size:10.5px; color:var(--text-secondary);
+    text-align:center; padding:4px 0 0;
+    border-top:1px solid var(--border); margin-top:4px;
+  }
 </style>
 </head>
 <body>
@@ -817,7 +866,10 @@
       axis: axisFieldName,
       values: numCol ? [numCol.name] : [],
       agg: 'sum',
+      sortOrder: 'value-desc',
       colorIndex: state.visuals.length % PALETTE.length,
+      categoryColors: {},
+      customTitle: null,
       filterField: axisFieldName,
       filterValue: '__all__'
     };
@@ -870,7 +922,7 @@
     canvasGrid.innerHTML = state.visuals.map(v => {
       const typeInfo = CHART_TYPES.find(t=>t.id===v.type);
       const label = typeInfo ? typeInfo.label : 'Slicer';
-      const title = v.type === 'slicer' ? ('Filter: ' + v.filterField) : (v.axis ? v.axis + ' by ' + (v.values[0] || '—') : 'New visual');
+      const title = visualTitle(v);
       return '<div class="visual-card '+(v.type==='slicer'?'slicer-card':'')+'" data-id="'+v.id+'" tabindex="0">'+
         '<div class="visual-header">'+
           '<span class="visual-title">'+escapeHtml(title)+'</span>'+
@@ -901,6 +953,16 @@
     }
   }
 
+  function visualTitle(v){
+    if(v.customTitle) return v.customTitle;
+    if(v.type === 'slicer') return 'Filter: ' + v.filterField;
+    return v.axis ? v.axis + ' by ' + (v.values[0] || '—') : 'New visual';
+  }
+
+  function axisValueConflict(v){
+    return ['bar','line','area','pie','doughnut'].includes(v.type) && v.axis && v.values.includes(v.axis);
+  }
+
   function renderVisualBody(v){
     const body = document.getElementById('body-' + v.id);
     if(!body) return;
@@ -914,6 +976,11 @@
 
     if(!v.axis || (v.type !== 'table' && v.type !== 'kpi' && v.values.length === 0)){
       body.innerHTML = '<div class="visual-empty-state">Select this visual, then choose an Axis and Values field in the Visualization pane.</div>';
+      return;
+    }
+
+    if(axisValueConflict(v)){
+      body.innerHTML = '<div class="visual-empty-state">Axis and Values are both set to <strong>'+escapeHtml(v.axis)+'</strong>. Select this visual and pick a different Axis or Value on the right.</div>';
       return;
     }
 
@@ -942,7 +1009,7 @@
     });
   }
 
-  function aggregate(rows, axisField, valueField, agg){
+  function aggregate(rows, axisField, valueField, agg, sortOrder){
     const groups = new Map();
     rows.forEach(r => {
       const key = r[axisField] === undefined || r[axisField] === '' ? '(blank)' : r[axisField];
@@ -952,8 +1019,8 @@
       if(!isNaN(num)) groups.get(key).push(num);
       else if(agg === 'count') groups.get(key).push(0);
     });
-    const labels = Array.from(groups.keys());
-    const values = labels.map(k => {
+    let labels = Array.from(groups.keys());
+    let values = labels.map(k => {
       const arr = groups.get(k);
       if(arr.length === 0) return 0;
       switch(agg){
@@ -965,6 +1032,14 @@
         default: return arr.reduce((a,b)=>a+b,0);
       }
     });
+    if(sortOrder && sortOrder !== 'none'){
+      const idx = labels.map((_,i)=>i);
+      if(sortOrder === 'value-desc') idx.sort((a,b) => values[b]-values[a]);
+      else if(sortOrder === 'value-asc') idx.sort((a,b) => values[a]-values[b]);
+      else if(sortOrder === 'label-asc') idx.sort((a,b) => String(labels[a]).localeCompare(String(labels[b])));
+      labels = idx.map(i=>labels[i]);
+      values = idx.map(i=>values[i]);
+    }
     return { labels, values };
   }
 
@@ -998,15 +1073,18 @@
   function renderTableBody(v, body, rows, table){
     const cols = v.values.length ? [v.axis, ...v.values] : table.columns.map(c=>c.name);
     const shown = rows.slice(0, 200);
-    body.innerHTML = '<div class="table-scroll"><table class="data-table"><thead><tr>'+
+    body.innerHTML = '<div class="table-wrap"><div class="table-scroll"><table class="data-table"><thead><tr>'+
       cols.map(c=>'<th>'+escapeHtml(c)+'</th>').join('')+
       '</tr></thead><tbody>'+
       shown.map(r => '<tr>'+cols.map(c=>'<td>'+escapeHtml(r[c] !== undefined ? r[c] : '')+'</td>').join('')+'</tr>').join('')+
-      '</tbody></table></div>';
+      '</tbody></table></div>'+
+      (rows.length > shown.length ? '<div class="table-footer">Showing '+shown.length+' of '+rows.length+' rows</div>' : '<div class="table-footer">'+rows.length+' row'+(rows.length===1?'':'s')+'</div>')+
+      '</div>';
   }
 
   function renderChartBody(v, body, rows){
-    body.innerHTML = '<canvas id="chart-'+v.id+'"></canvas>';
+    const title = visualTitle(v);
+    body.innerHTML = '<canvas id="chart-'+v.id+'" role="img" aria-label="'+escapeAttr(title)+'"></canvas>';
     const ctx = document.getElementById('chart-' + v.id).getContext('2d');
 
     if(chartInstances[v.id]){ chartInstances[v.id].destroy(); }
@@ -1021,7 +1099,7 @@
         .filter(p => !isNaN(p.x) && !isNaN(p.y));
       chartInstances[v.id] = new Chart(ctx, {
         type:'scatter',
-        data:{ datasets:[{ label: valField, data: points, backgroundColor: PALETTE[v.colorIndex] }] },
+        data:{ datasets:[{ label: valField, data: points, backgroundColor: v.customColor || PALETTE[v.colorIndex] }] },
         options: baseOptions(gridColor, tickColor, true)
       });
       return;
@@ -1029,22 +1107,31 @@
 
     let labels, datasets;
     const isPie = v.type === 'pie' || v.type === 'doughnut';
+    const singleSeriesColorable = (v.type === 'bar' || isPie) && v.values.length === 1;
 
     if(isPie){
       const valField = v.values[0];
-      const { labels: L, values: V } = aggregate(rows, v.axis, valField, v.agg);
+      const { labels: L, values: V } = aggregate(rows, v.axis, valField, v.agg, v.sortOrder);
       labels = L;
-      datasets = [{ data: V, backgroundColor: labels.map((_,i)=>PALETTE[i % PALETTE.length]), borderColor: state.theme==='dark' ? '#2B2B2B' : '#fff', borderWidth: 2 }];
+      datasets = [{
+        data: V,
+        backgroundColor: labels.map((lbl,i) => (v.categoryColors && v.categoryColors[lbl]) || PALETTE[i % PALETTE.length]),
+        borderColor: state.theme==='dark' ? '#2B2B2B' : '#fff',
+        borderWidth: 2
+      }];
     } else {
-      const first = aggregate(rows, v.axis, v.values[0], v.agg);
+      const first = aggregate(rows, v.axis, v.values[0], v.agg, v.sortOrder);
       labels = first.labels;
       datasets = v.values.map((valField, i) => {
-        const { values } = aggregate(rows, v.axis, valField, v.agg);
-        const color = PALETTE[(v.colorIndex + i) % PALETTE.length];
+        const { values } = aggregate(rows, v.axis, valField, v.agg, v.sortOrder);
+        const color = (i === 0 && v.customColor) ? v.customColor : PALETTE[(v.colorIndex + i) % PALETTE.length];
+        const bg = v.type === 'line' ? 'transparent' : (v.type==='area' ? hexToRgba(color,0.25) : color);
         return {
           label: valField,
           data: values,
-          backgroundColor: v.type === 'line' ? 'transparent' : (v.type==='area' ? hexToRgba(color,0.25) : color),
+          backgroundColor: (singleSeriesColorable && v.type==='bar')
+            ? labels.map((lbl,j) => (v.categoryColors && v.categoryColors[lbl]) || PALETTE[j % PALETTE.length])
+            : bg,
           borderColor: color,
           fill: v.type === 'area',
           tension: v.type === 'area' || v.type === 'line' ? 0.3 : 0,
@@ -1056,17 +1143,16 @@
 
     // Cap the number of categories drawn — a high-cardinality axis (e.g. an ID
     // column) would otherwise render as thousands of invisible slivers.
+    // aggregate() already sorted by v.sortOrder, so a plain slice keeps that order.
     const MAX_CATEGORIES = 30;
     let truncatedFrom = null;
     if(labels.length > MAX_CATEGORIES){
       truncatedFrom = labels.length;
-      const rankBy = datasets[0].data;
-      const order = labels.map((_,i)=>i).sort((a,b) => (rankBy[b]||0) - (rankBy[a]||0)).slice(0, MAX_CATEGORIES);
-      labels = order.map(i => labels[i]);
+      labels = labels.slice(0, MAX_CATEGORIES);
       datasets = datasets.map(ds => ({
         ...ds,
-        data: order.map(i => ds.data[i]),
-        backgroundColor: Array.isArray(ds.backgroundColor) ? order.map(i => ds.backgroundColor[i]) : ds.backgroundColor
+        data: ds.data.slice(0, MAX_CATEGORIES),
+        backgroundColor: Array.isArray(ds.backgroundColor) ? ds.backgroundColor.slice(0, MAX_CATEGORIES) : ds.backgroundColor
       }));
     }
 
@@ -1137,25 +1223,73 @@
     ).join('');
 
     const numericCols = table.columns.filter(c => c.type === 'number');
+    const nonNumericCols = table.columns.filter(c => c.type !== 'number');
     const allCols = table.columns;
-
-    const axisOptions = allCols.map(c => '<option value="'+escapeAttr(c.name)+'" '+(c.name===v.axis?'selected':'')+'>'+escapeHtml(c.name)+'</option>').join('');
-    const valueOptions = (numericCols.length ? numericCols : allCols).map(c => '<option value="'+escapeAttr(c.name)+'">'+escapeHtml(c.name)+'</option>').join('');
 
     const isTableType = v.type === 'table';
     const isKpi = v.type === 'kpi';
-    const axisLabel = isKpi ? 'Filter (unused)' : (isTableType ? 'Primary column' : (v.type==='scatter' ? 'X axis' : 'Axis'));
-    const valuesLabel = v.type==='scatter' ? 'Y value' : 'Values';
+    const isScatter = v.type === 'scatter';
+    const isPie = v.type === 'pie' || v.type === 'doughnut';
+
+    function glyph(t){ return t==='number' ? 'Σ ' : (t==='date' ? '\uD83D\uDCC5 ' : 'Abc '); }
+
+    // Axis field choices are restricted to what actually makes sense for the
+    // chart type — this is what stops "Revenue by Revenue"-style broken charts
+    // from being buildable in the first place, rather than just warning after.
+    let axisPool = isScatter ? numericCols : (isTableType ? allCols : nonNumericCols);
+    if(axisPool.length === 0) axisPool = allCols;
+    let axisCols = axisPool.filter(c => !v.values.includes(c.name) || c.name === v.axis);
+    if(axisCols.length === 0) axisCols = axisPool;
+    const axisOptions = axisCols.map(c => '<option value="'+escapeAttr(c.name)+'" '+(c.name===v.axis?'selected':'')+'>'+glyph(c.type)+escapeHtml(c.name)+'</option>').join('');
+
+    const valuePool = (isTableType ? allCols : (numericCols.length ? numericCols : allCols)).filter(c => c.name !== v.axis);
+    const valueOptions = valuePool.map(c => '<option value="'+escapeAttr(c.name)+'">'+glyph(c.type)+escapeHtml(c.name)+'</option>').join('');
+
+    const axisLabel = isKpi ? 'Filter (unused)' : (isTableType ? 'Primary column' : (isScatter ? 'X axis' : 'Axis'));
+    const valuesLabel = isScatter ? 'Y value' : 'Values';
 
     const valuesChips = v.values.map(val =>
       '<div class="chip"><span class="dot"></span><span>'+escapeHtml(val)+'</span><span class="x" data-remove-value="'+escapeAttr(val)+'">✕</span></div>'
     ).join('');
 
-    const showAgg = !isTableType && v.type !== 'scatter';
-    const allowMultiValues = !isTableType && !isKpi && v.type !== 'pie' && v.type !== 'doughnut' && v.type !== 'scatter';
+    const showAgg = !isTableType && !isScatter;
+    const showSort = !isTableType && !isKpi && !isScatter;
+    const allowMultiValues = !isTableType && !isKpi && !isPie && !isScatter;
+    const singleSeriesColorable = (v.type === 'bar' || isPie) && v.values.length === 1;
+
+    const conflictWarning = axisValueConflict(v)
+      ? '<div class="axis-warning">Axis and Values are both set to <strong>'+escapeHtml(v.axis)+'</strong>. Pick two different fields.</div>'
+      : '';
+
+    let colorSectionHtml;
+    if(singleSeriesColorable && v.axis && v.values[0]){
+      const catRows = getFilteredRows(v.table);
+      const catLabels = aggregate(catRows, v.axis, v.values[0], v.agg, v.sortOrder).labels.slice(0, 30);
+      colorSectionHtml =
+        '<div class="section-title">Data colors</div>'+
+        '<div class="field-well-hint">Set a color for each '+escapeHtml(v.axis)+' value shown.</div>'+
+        '<div class="color-list">'+
+          catLabels.map((lbl,i) => {
+            const hex = (v.categoryColors && v.categoryColors[lbl]) || PALETTE[i % PALETTE.length];
+            return '<div class="color-row"><input type="color" value="'+hex+'" data-cat-color="'+escapeAttr(lbl)+'"><span title="'+escapeAttr(lbl)+'">'+escapeHtml(lbl)+'</span></div>';
+          }).join('')+
+        '</div>'+
+        '<span class="auto-link" id="resetColorsLink" style="display:inline-block;margin-top:8px;">Reset to default colors</span>';
+    } else {
+      colorSectionHtml =
+        '<div class="section-title">'+(v.values.length>1 ? 'Series colors' : 'Color')+'</div>'+
+        '<div class="field-well-hint">'+(v.values.length>1 ? 'Sets the starting color; each extra series steps to the next one.' : 'Pick a preset or use the custom swatch.')+'</div>'+
+        '<div class="swatch-row" id="swatchRow">'+
+          PALETTE.map((c,i)=>'<div class="swatch '+(v.colorIndex===i && !v.customColor?'active':'')+'" style="background:'+c+'" data-color-index="'+i+'"></div>').join('')+
+          '<input type="color" id="customColorInput" value="'+(v.customColor||PALETTE[v.colorIndex])+'" title="Custom color">'+
+        '</div>';
+    }
 
     vizPaneBody.innerHTML =
+      '<div class="field-well-label">Title</div>'+
+      '<input type="text" class="title-input" id="titleInput" placeholder="'+escapeAttr(visualTitle(v))+'" value="'+escapeAttr(v.customTitle||'')+'">'+
       '<div class="type-grid">'+typeGrid+'</div>'+
+      conflictWarning+
       '<div class="field-well"><div class="field-well-label">Data table</div><select id="tableSelect">'+tableOptions+'</select></div>'+
       (isKpi ? '' :
         '<div class="field-well">'+
@@ -1174,10 +1308,18 @@
           ['sum','average','count','min','max'].map(a=>'<option value="'+a+'" '+(v.agg===a?'selected':'')+'>'+a+'</option>').join('')+
         '</select></div>' : '')+
       '</div>'+
-      '<div class="section-title">Color</div>'+
-      '<div class="swatch-row" id="swatchRow">'+
-        PALETTE.map((c,i)=>'<div class="swatch '+(v.colorIndex===i?'active':'')+'" style="background:'+c+'" data-color-index="'+i+'"></div>').join('')+
-      '</div>';
+      (showSort ? '<div class="field-well"><div class="field-well-label">Sort by</div><select id="sortSelect">'+
+        [['value-desc','Value: high to low'],['value-asc','Value: low to high'],['label-asc','Category: A to Z']]
+          .map(o=>'<option value="'+o[0]+'" '+(v.sortOrder===o[0]?'selected':'')+'>'+o[1]+'</option>').join('')+
+      '</select></div>' : '')+
+      colorSectionHtml;
+
+    const titleInput = document.getElementById('titleInput');
+    titleInput.addEventListener('input', e => {
+      v.customTitle = e.target.value.trim() ? e.target.value : null;
+      const titleEl = document.querySelector('.visual-card[data-id="'+v.id+'"] .visual-title');
+      if(titleEl) titleEl.textContent = visualTitle(v);
+    });
 
     const autoAxisLink = document.getElementById('autoAxisLink');
     if(autoAxisLink) autoAxisLink.addEventListener('click', () => {
@@ -1189,8 +1331,9 @@
     document.getElementById('tableSelect').addEventListener('change', e => {
       v.table = e.target.value;
       const t = getTable(v.table);
-      v.axis = t.columns[0].name;
+      v.axis = pickDefaultAxis(t);
       v.values = [];
+      v.categoryColors = {};
       renderVizPane(); renderCanvas();
     });
 
@@ -1198,12 +1341,19 @@
       btn.addEventListener('click', () => {
         v.type = btn.dataset.type;
         if((v.type==='pie'||v.type==='doughnut'||v.type==='kpi') && v.values.length>1) v.values = v.values.slice(0,1);
+        const newIsScatter = v.type === 'scatter';
+        const newIsTable = v.type === 'table';
+        let pool = newIsScatter ? numericCols : (newIsTable ? allCols : nonNumericCols);
+        if(pool.length === 0) pool = allCols;
+        if(!pool.some(c => c.name === v.axis)){
+          v.axis = newIsScatter ? (numericCols[0] && numericCols[0].name) : pickDefaultAxis(table);
+        }
         renderVizPane(); renderCanvas();
       });
     });
 
     const axisSelect = document.getElementById('axisSelect');
-    if(axisSelect) axisSelect.addEventListener('change', e => { v.axis = e.target.value; renderCanvas(); });
+    if(axisSelect) axisSelect.addEventListener('change', e => { v.axis = e.target.value; renderVizPane(); renderCanvas(); });
 
     const addValueSelect = document.getElementById('addValueSelect');
     addValueSelect.addEventListener('change', e => {
@@ -1222,11 +1372,28 @@
     });
 
     const aggSelect = document.getElementById('aggSelect');
-    if(aggSelect) aggSelect.addEventListener('change', e => { v.agg = e.target.value; renderCanvas(); });
+    if(aggSelect) aggSelect.addEventListener('change', e => { v.agg = e.target.value; renderVizPane(); renderCanvas(); });
+
+    const sortSelect = document.getElementById('sortSelect');
+    if(sortSelect) sortSelect.addEventListener('change', e => { v.sortOrder = e.target.value; renderCanvas(); });
+
+    document.querySelectorAll('[data-cat-color]').forEach(inp => {
+      inp.addEventListener('input', e => {
+        if(!v.categoryColors) v.categoryColors = {};
+        v.categoryColors[inp.dataset.catColor] = e.target.value;
+        renderCanvas();
+      });
+    });
+    const resetColorsLink = document.getElementById('resetColorsLink');
+    if(resetColorsLink) resetColorsLink.addEventListener('click', () => { v.categoryColors = {}; renderVizPane(); renderCanvas(); });
+
+    const customColorInput = document.getElementById('customColorInput');
+    if(customColorInput) customColorInput.addEventListener('input', e => { v.customColor = e.target.value; renderCanvas(); });
 
     document.querySelectorAll('[data-color-index]').forEach(el => {
       el.addEventListener('click', () => {
         v.colorIndex = Number(el.dataset.colorIndex);
+        v.customColor = null;
         renderVizPane(); renderCanvas();
       });
     });
